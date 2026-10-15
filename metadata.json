@@ -1,0 +1,6 @@
+{
+  "name": "Dhanvantari Pharmacy ERP",
+  "description": "Complete Pharmacy ERP Software for Dhanvantari Pharmacy with FEFO Billing, Barcode & Batch Scanning, AI OCR Invoice Entry, Expiry Tracking, Purchase & Stock Ledger, Reports & Analytics.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
