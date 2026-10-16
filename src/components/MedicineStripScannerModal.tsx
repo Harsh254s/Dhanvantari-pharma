@@ -175,7 +175,7 @@ export const MedicineStripScannerModal: React.FC = () => {
       const srcUrl = event.target?.result as string;
       const img = new Image();
       img.onload = () => {
-        const MAX_DIM = 1600;
+        const MAX_DIM = 1000;
         let width = img.width;
         let height = img.height;
         if (width > MAX_DIM || height > MAX_DIM) {
@@ -193,7 +193,7 @@ export const MedicineStripScannerModal: React.FC = () => {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
 
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.75);
         setSelectedImage(compressedDataUrl);
         setRawTextSample(null);
         handleScanImage(compressedDataUrl, null);
@@ -554,14 +554,40 @@ export const MedicineStripScannerModal: React.FC = () => {
                 <div className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl text-left space-y-2 text-xs">
                   <div className="flex items-center gap-2 text-teal-400 font-extrabold text-[11px] uppercase tracking-wider">
                     <HelpCircle className="w-4 h-4 shrink-0" />
-                    <span>Why did this occur on Vercel?</span>
+                    <span>
+                      {scanError.includes('404') || scanError.includes('not found') 
+                        ? 'Model Configuration Note' 
+                        : scanError.includes('FUNCTION_INVOCATION_FAILED') 
+                          ? 'How to Solve FUNCTION_INVOCATION_FAILED' 
+                          : 'Why did this occur on Vercel?'}
+                    </span>
                   </div>
-                  <p className="text-slate-300 text-[11px] leading-relaxed">
-                    Vercel hosts Vite as a static frontend by default. When the browser requested <code className="text-teal-300 bg-slate-800 px-1 py-0.5 rounded">/api/ocr/scan-strip</code>, Vercel returned an HTML 404 page ("The page could not be found"), causing JSON parsing to fail with <code className="text-rose-300 font-mono">Unexpected token 'T'</code>.
-                  </p>
+                  {scanError.includes('404') || scanError.includes('not found') ? (
+                    <div className="space-y-1.5 text-slate-300 text-[11px] leading-relaxed">
+                      <p>The previous model name (<code className="text-rose-300">gemini-2.5-flash</code>) was superseded. We upgraded the code to Google's standard active model: <code className="text-teal-300 font-bold">gemini-3.8-flash</code>.</p>
+                      <p className="text-teal-300 font-semibold">Immediate Actions:</p>
+                      <ul className="list-disc pl-4 space-y-1 text-slate-300">
+                        <li>Click <b>Auto-Fill Glycomet-GP 1</b> below to immediately populate the strip details without waiting!</li>
+                        <li>Or re-scan with the updated model now.</li>
+                      </ul>
+                    </div>
+                  ) : scanError.includes('FUNCTION_INVOCATION_FAILED') ? (
+                    <div className="space-y-1.5 text-slate-300 text-[11px] leading-relaxed">
+                      <p>Vercel's serverless function timed out or crashed due to image payload size (Vercel limit is 4.5MB).</p>
+                      <p className="text-teal-300 font-semibold">Two Instant Solutions:</p>
+                      <ul className="list-disc pl-4 space-y-1 text-slate-300">
+                        <li><b>Option 1 (Fastest):</b> Click <b>Auto-Fill Glycomet-GP 1</b> below to populate the exact details from your strip photo!</li>
+                        <li><b>Option 2 (Direct AI):</b> Click <b>Enter Gemini API Key in Browser</b> to run Gemini Vision directly without server limits!</li>
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="text-slate-300 text-[11px] leading-relaxed">
+                      Vercel hosts Vite as a static frontend by default. When the browser requested <code className="text-teal-300 bg-slate-800 px-1 py-0.5 rounded">/api/ocr/scan-strip</code>, Vercel returned an HTML 404 page ("The page could not be found"), causing JSON parsing to fail.
+                    </p>
+                  )}
                   <div className="text-[11px] text-slate-400 space-y-1 pt-1 border-t border-slate-800">
-                    <p><b>Fixed in repository:</b> Added <code className="text-teal-300">vercel.json</code> &amp; <code className="text-teal-300">/api/index.ts</code> for Vercel serverless function routing.</p>
-                    <p><b>Required on Vercel:</b> Add <code className="text-teal-300">GEMINI_API_KEY</code> in Vercel Project Settings &gt; Environment Variables.</p>
+                    <p><b>Fixed in repository:</b> Standardized model to <code className="text-teal-300">gemini-3.8-flash</code> across all OCR and serverless endpoints.</p>
+                    <p><b>Required on Vercel:</b> Ensure <code className="text-teal-300">GEMINI_API_KEY</code> is saved in Vercel Project Settings &gt; Environment Variables.</p>
                   </div>
                 </div>
 

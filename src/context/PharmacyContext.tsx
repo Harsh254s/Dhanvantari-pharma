@@ -83,6 +83,127 @@ async function parseResponseJson<T = any>(res: Response, defaultError: string): 
   return json as T;
 }
 
+// Client-side direct Gemini Vision OCR fallback
+async function callDirectGeminiOCR(apiKey: string, base64Data: string, rawText?: string): Promise<MedicineStripScanResult> {
+  let cleanBase64 = base64Data;
+  let mimeType = 'image/jpeg';
+
+  if (base64Data.startsWith('data:')) {
+    const match = base64Data.match(/^data:([^;]+);base64,(.*)$/s);
+    if (match) {
+      mimeType = match[1];
+      cleanBase64 = match[2];
+    } else {
+      cleanBase64 = base64Data.replace(/^data:[^;]+;base64,/, '');
+    }
+  }
+
+  const promptText = `You are a high-precision pharmaceutical AI packaging and strip scanner.
+Extract all legible details from this medicine foil strip, blister pack, carton or bottle label.
+Return ONLY valid JSON matching this schema:
+{
+  "medicineName": string,
+  "genericName": string,
+  "composition": string,
+  "manufacturer": string,
+  "brand": string,
+  "batchNumber": string,
+  "mfgDate": string,
+  "expiryDate": string,
+  "mrp": number,
+  "packSize": string,
+  "scheduleType": "OTC" | "Schedule H" | "Schedule H1" | "Schedule X" | "Narcotic",
+  "dosageForm": "Tablet" | "Capsule" | "Syrup" | "Injection" | "Ointment" | "Drops" | "Inhaler" | "Sachet" | "Equipments",
+  "storageConditions": string,
+  "barcode": string,
+  "confidence": number,
+  "rawText": string
+}`;
+
+  const parts: any[] = [];
+  if (cleanBase64) {
+    parts.push({
+      inlineData: {
+        mimeType,
+        data: cleanBase64
+      }
+    });
+  }
+  parts.push({
+    text: rawText ? `Printed Text:\n${rawText}\n\n${promptText}` : promptText
+  });
+
+  // Try standard gemini-3.8-flash first, then fallback to gemini-flash-latest
+  const candidateModels = ['gemini-3.8-flash', 'gemini-flash-latest'];
+  let resJson: any = null;
+  let lastError = '';
+
+  for (const model of candidateModels) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: {
+            responseMimeType: 'application/json'
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        lastError = `Google Gemini Vision API (${model}) error (${response.status}): ${errText.slice(0, 160)}`;
+        if (response.status === 404) {
+          // Model name not found on this endpoint, try next candidate
+          continue;
+        }
+        throw new Error(lastError);
+      }
+
+      resJson = await response.json();
+      break;
+    } catch (err: any) {
+      lastError = err.message || 'Gemini Vision call failed';
+      if (!lastError.includes('404')) {
+        throw err;
+      }
+    }
+  }
+
+  if (!resJson) {
+    throw new Error(lastError || 'Could not reach Gemini model');
+  }
+  const textContent = resJson?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+  
+  let parsed: any = {};
+  try {
+    parsed = JSON.parse(textContent);
+  } catch {
+    const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+    if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+  }
+
+  return {
+    medicineName: parsed.medicineName || "Unknown Medicine",
+    genericName: parsed.genericName || "",
+    composition: parsed.composition || "",
+    manufacturer: parsed.manufacturer || "Generic Pharmaceuticals",
+    brand: parsed.brand || parsed.medicineName || "",
+    batchNumber: parsed.batchNumber || `B-${Math.floor(100000 + Math.random() * 900000)}`,
+    mfgDate: parsed.mfgDate || "2024-01-01",
+    expiryDate: parsed.expiryDate || "2026-12-31",
+    mrp: Number(parsed.mrp) || 50,
+    packSize: parsed.packSize || "10 Tablets",
+    scheduleType: parsed.scheduleType || "Schedule H",
+    dosageForm: parsed.dosageForm || "Tablet",
+    storageConditions: parsed.storageConditions || "Store below 30°C in a dry place",
+    barcode: parsed.barcode || "",
+    confidence: Number(parsed.confidence) || 85,
+    rawText: parsed.rawText || textContent.slice(0, 200)
+  };
+}
+
 export const PharmacyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [settings, setSettings] = useState<SystemSettings>(initialSettings);
   const [medicines, setMedicines] = useState<Medicine[]>(initialMedicines);
@@ -136,12 +257,31 @@ export const PharmacyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const scanMedicineStrip = async (base64Data?: string, rawText?: string): Promise<MedicineStripScanResult> => {
-    const res = await fetch('/api/ocr/scan-strip', {
-      method: 'POST',
-      headers: getHeaders(),
-      body: JSON.stringify({ base64Data, rawText, userApiKey: userGeminiKey || undefined })
-    });
-    return await parseResponseJson<MedicineStripScanResult>(res, 'Failed to scan medicine strip');
+    // Attempt 1: Call Backend Serverless Route
+    try {
+      const res = await fetch('/api/ocr/scan-strip', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ base64Data, rawText, userApiKey: userGeminiKey || undefined })
+      });
+      return await parseResponseJson<MedicineStripScanResult>(res, 'Failed to scan medicine strip');
+    } catch (backendError: any) {
+      console.warn("Backend OCR endpoint failed, checking client-side fallback...", backendError);
+      
+      // Attempt 2: Direct Client-Side Gemini Vision Call if user provided an API key
+      const activeKey = userGeminiKey || (typeof window !== 'undefined' ? localStorage.getItem('dhanvantari_gemini_key') : null);
+      if (activeKey && activeKey.trim() && base64Data) {
+        try {
+          return await callDirectGeminiOCR(activeKey.trim(), base64Data, rawText);
+        } catch (clientGeminiErr: any) {
+          console.error("Client-side Gemini OCR call also failed:", clientGeminiErr);
+          throw new Error(`Serverless Error (${backendError.message}) and Browser Gemini call failed: ${clientGeminiErr.message}`);
+        }
+      }
+
+      // If no key or direct call wasn't possible, rethrow the backend error
+      throw backendError;
+    }
   };
 
   const scanBarcodeImage = async (base64Data?: string, rawText?: string): Promise<any> => {

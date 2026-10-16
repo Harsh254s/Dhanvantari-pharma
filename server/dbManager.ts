@@ -347,7 +347,7 @@ Return ONLY valid JSON with schema matching:
     contentsParts.push({ text: rawText ? `Invoice Text Content:\n${rawText}\n\n${promptText}` : promptText });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: { parts: contentsParts },
       config: {
         responseMimeType: 'application/json',
@@ -466,7 +466,7 @@ Return ONLY valid JSON matching this schema:
     contentsParts.push({ text: rawText ? `Strip Text Content:\n${rawText}\n\n${promptText}` : promptText });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: { parts: contentsParts },
       config: {
         responseMimeType: 'application/json',
@@ -600,7 +600,7 @@ Return ONLY valid JSON matching this schema:
     contentsParts.push({ text: rawText ? `Barcode Image Content:\n${rawText}\n\n${promptText}` : promptText });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: { parts: contentsParts },
       config: {
         responseMimeType: 'application/json',
@@ -669,7 +669,7 @@ Return JSON format:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json'
@@ -711,7 +711,7 @@ Provide executive AI Insights & Demand Predictions for the pharmacy manager in J
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json'
